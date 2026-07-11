@@ -223,6 +223,14 @@
       -webkit-overflow-scrolling: touch;
     }
 
+    .prompt-body a {
+      color: #2563eb;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
     .actions {
       position: sticky;
       bottom: 0;
@@ -397,10 +405,41 @@
       ].filter(Boolean).join(' · ');
 
       document.getElementById('promptTitle').textContent = data.title || '프롬프트';
-      document.getElementById('promptBody').textContent = currentPromptBody;
+      renderPromptBody(currentPromptBody);
       document.getElementById('promptCard').classList.remove('hidden');
 
       showStatus('프롬프트를 불러왔습니다.', 'ok');
+    }
+
+    function renderPromptBody(text) {
+      const promptBody = document.getElementById('promptBody');
+      const source = String(text || '');
+      const urlPattern = /https?:\/\/[^\s<>"']+/g;
+      let cursor = 0;
+      let match;
+
+      promptBody.textContent = '';
+
+      while ((match = urlPattern.exec(source)) !== null) {
+        const url = match[0];
+
+        if (match.index > cursor) {
+          promptBody.appendChild(document.createTextNode(source.slice(cursor, match.index)));
+        }
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        promptBody.appendChild(link);
+
+        cursor = match.index + url.length;
+      }
+
+      if (cursor < source.length) {
+        promptBody.appendChild(document.createTextNode(source.slice(cursor)));
+      }
     }
 
     function copyPrompt() {
