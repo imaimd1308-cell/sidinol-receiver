@@ -253,6 +253,32 @@
       padding: 3px 0 8px;
     }
 
+    .receiver-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      transform: translateX(-50%) translateY(20px);
+      z-index: 9999;
+      min-width: 180px;
+      max-width: calc(100% - 40px);
+      padding: 13px 18px;
+      border-radius: 999px;
+      background: rgba(17, 24, 39, 0.94);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 900;
+      text-align: center;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+
+    .receiver-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     @media (max-width: 480px) {
       .app {
         padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
@@ -328,11 +354,14 @@
     <div class="footer">시디놀 프롬프트 수신기 4.0</div>
   </div>
 
+  <div id="receiverToast" class="receiver-toast">복사했습니다</div>
+
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbzWrr0qnSwnDIL1fCe7ECJMycsJcLVu7W1svTwk8ewJPLb5vK8KAel0e-4ulC_z5QI/exec';
 
     let currentPromptBody = '';
     let jsonpScript = null;
+    let receiverToastTimer = null;
 
     function loadPrompt() {
       const passwordInput = document.getElementById('passwordInput');
@@ -454,6 +483,7 @@
         navigator.clipboard.writeText(text)
           .then(function () {
             showStatus('프롬프트 본문을 복사했습니다.', 'ok');
+            showReceiverToast('복사했습니다');
           })
           .catch(function () {
             fallbackCopy(text);
@@ -484,6 +514,7 @@
 
         if (success) {
           showStatus('프롬프트 본문을 복사했습니다.', 'ok');
+          showReceiverToast('복사했습니다');
         } else {
           showStatus('복사에 실패했습니다. 본문을 직접 선택해 복사하세요.', 'error');
         }
@@ -492,6 +523,25 @@
       }
 
       document.body.removeChild(textarea);
+    }
+
+    function showReceiverToast(message) {
+      const toast = document.getElementById('receiverToast');
+
+      if (!toast) {
+        return;
+      }
+
+      toast.textContent = message || '복사했습니다';
+      toast.classList.add('show');
+
+      if (receiverToastTimer) {
+        clearTimeout(receiverToastTimer);
+      }
+
+      receiverToastTimer = setTimeout(function () {
+        toast.classList.remove('show');
+      }, 1800);
     }
 
     function showStatus(message, type) {
