@@ -231,6 +231,20 @@
       text-underline-offset: 3px;
     }
 
+    .prompt-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin-top: 12px;
+      border-radius: 12px;
+      object-fit: contain;
+      background: #f8fafc;
+    }
+
+    .prompt-image:first-child {
+      margin-top: 0;
+    }
+
     .actions {
       position: sticky;
       bottom: 0;
@@ -357,9 +371,10 @@
   <div id="receiverToast" class="receiver-toast">복사했습니다</div>
 
   <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbzckq1IL0kh1eaYvv1g5N99HponpgyWqpmobrmiDSYS6eD20MJ16BCGDCIX4ph2h-U/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyozJCMPlRdngUGaFEYplYQdl7B0dvZ97LRnjG3fjnOHNG9O9VPDVKCDqIjX7AEg-4/exec';
 
     let currentPromptBody = '';
+    let currentPromptImageDataUrl = '';
     let jsonpScript = null;
     let receiverToastTimer = null;
 
@@ -427,6 +442,7 @@
       const data = result.data || {};
 
       currentPromptBody = data.body || '';
+      currentPromptImageDataUrl = String(data.imageDataUrl || '').trim();
 
       document.getElementById('promptMeta').textContent = [
         data.promptId ? '프롬프트번호: ' + data.promptId : '',
@@ -434,13 +450,13 @@
       ].filter(Boolean).join(' · ');
 
       document.getElementById('promptTitle').textContent = data.title || '프롬프트';
-      renderPromptBody(currentPromptBody);
+      renderPromptBody(currentPromptBody, currentPromptImageDataUrl);
       document.getElementById('promptCard').classList.remove('hidden');
 
       showStatus('프롬프트를 불러왔습니다.', 'ok');
     }
 
-    function renderPromptBody(text) {
+    function renderPromptBody(text, imageDataUrl) {
       const promptBody = document.getElementById('promptBody');
       const source = String(text || '');
       const urlPattern = /https?:\/\/[^\s<>"']+/g;
@@ -469,9 +485,22 @@
       if (cursor < source.length) {
         promptBody.appendChild(document.createTextNode(source.slice(cursor)));
       }
+
+      if (imageDataUrl) {
+        const image = document.createElement('img');
+        image.className = 'prompt-image';
+        image.src = imageDataUrl;
+        image.alt = '송출된 이미지';
+        promptBody.appendChild(image);
+      }
     }
 
     function copyPrompt() {
+      if (currentPromptImageDataUrl) {
+        copyPromptImage(currentPromptImageDataUrl);
+        return;
+      }
+
       const text = String(currentPromptBody || '').trim();
 
       if (!text) {
@@ -493,6 +522,61 @@
       }
 
       fallbackCopy(text);
+    }
+
+    function copyPromptImage(imageDataUrl) {
+      if (!navigator.clipboard || !window.ClipboardItem || !window.isSecureContext) {
+        showStatus('이 기기에서는 이미지 복사를 지원하지 않습니다. 이미지를 길게 눌러 저장하세요.', 'error');
+        return;
+      }
+
+      imageDataUrlToPngBlob(imageDataUrl)
+        .then(function (blob) {
+          return navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+        })
+        .then(function () {
+          showStatus('이미지를 복사했습니다.', 'ok');
+          showReceiverToast('복사했습니다');
+        })
+        .catch(function () {
+          showStatus('이미지 복사에 실패했습니다. 이미지를 길게 눌러 저장하세요.', 'error');
+        });
+    }
+
+    function imageDataUrlToPngBlob(imageDataUrl) {
+      return new Promise(function (resolve, reject) {
+        const image = new Image();
+
+        image.onload = function () {
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+
+          if (!context) {
+            reject(new Error('canvas context unavailable'));
+            return;
+          }
+
+          context.drawImage(image, 0, 0);
+          canvas.toBlob(function (blob) {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('image conversion failed'));
+            }
+          }, 'image/png');
+        };
+
+        image.onerror = function () {
+          reject(new Error('image load failed'));
+        };
+
+        image.src = imageDataUrl;
+      });
     }
 
     function fallbackCopy(text) {
@@ -553,6 +637,7 @@
 
     function hidePrompt() {
       currentPromptBody = '';
+      currentPromptImageDataUrl = '';
       document.getElementById('promptCard').classList.add('hidden');
       document.getElementById('promptMeta').textContent = '';
       document.getElementById('promptTitle').textContent = '';
