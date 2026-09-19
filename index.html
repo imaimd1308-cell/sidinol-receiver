@@ -441,15 +441,20 @@
 
       const data = result.data || {};
 
-      currentPromptBody = data.body || '';
       currentPromptImageDataUrl = String(data.imageDataUrl || '').trim();
+      currentPromptBody = currentPromptImageDataUrl
+        ? ''
+        : data.body || '';
 
       document.getElementById('promptMeta').textContent = [
         data.promptId ? '프롬프트번호: ' + data.promptId : '',
         data.sentAt ? '송출시각: ' + data.sentAt : ''
       ].filter(Boolean).join(' · ');
 
-      document.getElementById('promptTitle').textContent = data.title || '프롬프트';
+      document.getElementById('promptTitle').textContent =
+        currentPromptImageDataUrl
+          ? '사진 송출'
+          : data.title || '프롬프트';
       renderPromptBody(currentPromptBody, currentPromptImageDataUrl);
       document.getElementById('promptCard').classList.remove('hidden');
 
