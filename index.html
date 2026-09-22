@@ -372,10 +372,16 @@
 
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbxsI_GKFzKEEo4Ii-jK_X-R9vveS5ZOfnk5jt3BAAdfZSdF50QVPX6uqmJrpHL-s3w/exec';
+    const RECEIVER_MAX_RETRIES = 2;
+    const RECEIVER_RETRY_DELAY_MS = 900;
+    const RECEIVER_REQUEST_TIMEOUT_MS = 12000;
 
     let currentPromptBody = '';
     let currentPromptImageDataUrl = '';
     let jsonpScript = null;
+    let jsonpTimeoutTimer = null;
+    let jsonpRetryTimer = null;
+    let jsonpSequence = 0;
     let receiverToastTimer = null;
 
     function loadPrompt() {
@@ -392,10 +398,29 @@
       setLoading(true);
       showStatus('프롬프트를 불러오는 중입니다.', 'info');
 
-      const callbackName = 'sidinolReceiverCallback_' + Date.now();
+      requestPrompt(password, 0);
+    }
+
+    function requestPrompt(password, attempt) {
+      jsonpSequence += 1;
+
+      const callbackName =
+        'sidinolReceiverCallback_' +
+        Date.now() +
+        '_' +
+        jsonpSequence;
 
       window[callbackName] = function (result) {
         cleanupJsonp(callbackName);
+
+        if (
+          (!result || result.status === 'SERVER_ERROR') &&
+          attempt < RECEIVER_MAX_RETRIES
+        ) {
+          schedulePromptRetry(password, attempt);
+          return;
+        }
+
         setLoading(false);
         handleApiResult(result);
       };
@@ -403,17 +428,60 @@
       const url =
         API_URL +
         '?callback=' + encodeURIComponent(callbackName) +
-        '&password=' + encodeURIComponent(password);
+        '&password=' + encodeURIComponent(password) +
+        '&_=' + Date.now();
 
       jsonpScript = document.createElement('script');
       jsonpScript.src = url;
       jsonpScript.onerror = function () {
         cleanupJsonp(callbackName);
-        setLoading(false);
-        showStatus('연결에 실패했습니다. 인터넷 상태를 확인한 뒤 다시 시도하세요.', 'error');
+
+        if (attempt < RECEIVER_MAX_RETRIES) {
+          schedulePromptRetry(password, attempt);
+          return;
+        }
+
+        finishPromptRequestFailure();
       };
 
       document.body.appendChild(jsonpScript);
+
+      jsonpTimeoutTimer = setTimeout(function () {
+        cleanupJsonp(callbackName);
+
+        if (attempt < RECEIVER_MAX_RETRIES) {
+          schedulePromptRetry(password, attempt);
+          return;
+        }
+
+        finishPromptRequestFailure();
+      }, RECEIVER_REQUEST_TIMEOUT_MS);
+    }
+
+    function schedulePromptRetry(password, attempt) {
+      const nextAttempt = attempt + 1;
+
+      showStatus(
+        '연결이 지연되어 다시 시도 중입니다. (' +
+          nextAttempt +
+          '/' +
+          RECEIVER_MAX_RETRIES +
+          ')',
+        'info'
+      );
+
+      jsonpRetryTimer = setTimeout(function () {
+        jsonpRetryTimer = null;
+        requestPrompt(password, nextAttempt);
+      }, RECEIVER_RETRY_DELAY_MS);
+    }
+
+    function finishPromptRequestFailure() {
+      setLoading(false);
+      showStatus(
+        '연결에 실패했습니다. 인터넷 상태를 확인한 뒤 다시 시도하세요.',
+        'error'
+      );
     }
 
     function handleApiResult(result) {
@@ -657,6 +725,11 @@
     }
 
     function cleanupJsonp(callbackName) {
+      if (jsonpTimeoutTimer) {
+        clearTimeout(jsonpTimeoutTimer);
+        jsonpTimeoutTimer = null;
+      }
+
       if (jsonpScript && jsonpScript.parentNode) {
         jsonpScript.parentNode.removeChild(jsonpScript);
       }
